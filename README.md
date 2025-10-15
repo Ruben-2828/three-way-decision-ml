@@ -104,6 +104,7 @@ three-way-decision-analysis/
 ├── LICENSE                   # MIT License file
 ├── main.py                   # Main script to start the execution of the analysis
 ├── README.md                 # This file
+├── report.pdf                # Description and analysis of obtained results (in Italian)
 └── requirements.txt          # Python requirements for the project
 ```
 

@@ -22,11 +22,6 @@ def load_bank_marketing_dataset():
     X = bank_marketing.data.features
     y = bank_marketing.data.targets
 
-    print("Dataset metadata:")
-    print(bank_marketing.metadata)
-    print("Dataset variables:")
-    print(bank_marketing.variables)
-
     if isinstance(y, pd.DataFrame) and y.shape[1] == 1:
         y = y.iloc[:, 0]
 
@@ -61,8 +56,8 @@ def load_adult_census_dataset():
     df_clean = df.dropna()
     print(f"After removing missing values: {len(df_clean)} samples")
 
-    X = df_clean.drop('income', axis=1)
-    y = df_clean['income']
+    df_clean.drop(columns=['fnlwgt'], inplace=True)
+    print("Dropped 'fnlwgt' column")
 
     # Balance the dataset by creating a subset of 14k samples (7k per class)
     print("Creating balanced subset...")
@@ -87,9 +82,6 @@ def load_adult_census_dataset():
 
     X = df_balanced.drop('income', axis=1)
     y = df_balanced['income']
-
-    print(f"Balanced dataset created with {len(df_balanced)} samples")
-    print(f"Class distribution: {y.value_counts().to_dict()}")
 
     # Map target to binary: '<=50K' -> 0, '>50K' -> 1
     y = y.map({'<=50K': 0, '>50K': 1}).astype(int)
@@ -145,7 +137,7 @@ def save_classification_metrics(report_dict, model, accuracy, alpha, beta, defer
 # ==============================
 
 
-def plot_positive_roc(y_true, prob_values, model_name, out_path, alpha_points):
+def plot_positive_roc(y_true, prob_values, model_name, out_path, beta_points):
     fpr, tpr, _ = roc_curve(y_true, prob_values)
     auc = roc_auc_score(y_true, prob_values)
 
@@ -153,7 +145,7 @@ def plot_positive_roc(y_true, prob_values, model_name, out_path, alpha_points):
     plt.plot(fpr, tpr, label=f"{model_name} ROC (AUC={auc:.3f})")
     plt.plot([0, 1], [0, 1], "--", color="gray", linewidth=1)
 
-    for a in alpha_points:
+    for a in beta_points:
         y_pred_a = (prob_values >= a).astype(int)
         tp_a = np.sum((y_true == 1) & (y_pred_a == 1))
         fp_a = np.sum((y_true == 0) & (y_pred_a == 1))
@@ -161,7 +153,7 @@ def plot_positive_roc(y_true, prob_values, model_name, out_path, alpha_points):
         fn_a = np.sum((y_true == 1) & (y_pred_a == 0))
         fpr_a = fp_a / (fp_a + tn_a) if (fp_a + tn_a) > 0 else 0.0
         tpr_a = tp_a / (tp_a + fn_a) if (tp_a + fn_a) > 0 else 0.0
-        plt.scatter([fpr_a], [tpr_a], label=f"alpha={a:.2f}", s=35)
+        plt.scatter([fpr_a], [tpr_a], label=f"beta={a:.2f}", s=35)
     plt.xlabel("FPR")
     plt.ylabel("TPR")
     plt.title(f"ROC - Positive class ({model_name})")
@@ -171,7 +163,7 @@ def plot_positive_roc(y_true, prob_values, model_name, out_path, alpha_points):
     plt.close()
 
 
-def plot_negative_roc(y_true, prob_values, model_name, out_path, beta_points):
+def plot_negative_roc(y_true, prob_values, model_name, out_path, alpha_points):
     y_arr = y_true.values if hasattr(y_true, 'values') else y_true
     y_neg = (1 - y_arr).astype(int)
     p_neg = 1.0 - prob_values
@@ -182,7 +174,7 @@ def plot_negative_roc(y_true, prob_values, model_name, out_path, beta_points):
     plt.figure(figsize=(6, 5))
     plt.plot(fpr_neg, tpr_neg, label=f"{model_name} ROC Neg (AUC={auc_neg:.3f})")
 
-    for b in beta_points:
+    for b in alpha_points:
         thr_b = 1.0 - b
         y_pred_b = (p_neg >= thr_b).astype(int)
         tp_b = np.sum((y_neg == 1) & (y_pred_b == 1))
@@ -191,7 +183,7 @@ def plot_negative_roc(y_true, prob_values, model_name, out_path, beta_points):
         fn_b = np.sum((y_neg == 1) & (y_pred_b == 0))
         fpr_b = fp_b / (fp_b + tn_b) if (fp_b + tn_b) > 0 else 0.0
         tpr_b = tp_b / (tp_b + fn_b) if (tp_b + fn_b) > 0 else 0.0
-        plt.scatter([fpr_b], [tpr_b], label=f"beta={b:.2f}")
+        plt.scatter([fpr_b], [tpr_b], label=f"alpha={b:.2f}")
 
     plt.plot([0, 1], [0, 1], "--", color="gray", linewidth=1)
     plt.xlabel("FPR (neg)")
@@ -206,7 +198,7 @@ def plot_negative_roc(y_true, prob_values, model_name, out_path, beta_points):
 # ==============================
 # Calibration functions
 # ==============================
-def plot_calibration(y_true, prob_values, alphas, betas, title, out_name):
+def plot_calibration(y_true, prob_values, betas, alphas, title, out_name):
     plt.figure(figsize=(6, 5))
 
     frac_pos_all, mean_pred_all = calibration_curve(y_true, prob_values, n_bins=10, strategy="uniform")
@@ -215,7 +207,7 @@ def plot_calibration(y_true, prob_values, alphas, betas, title, out_name):
     plt.plot([0, 1], [0, 1], "--", color="gray", linewidth=1, label="Perfectly calibrated")
     plt.plot(mean_pred_all, frac_pos_all, marker="o", label=f"All (Brier={brier_all:.3f})")
 
-    for (a, b) in zip(alphas, betas):
+    for (a, b) in zip(betas, alphas):
         decisions = np.where(prob_values >= a, 1, np.where(prob_values <= b, 0, -1))
         decisions_mask = decisions != -1
 
@@ -230,7 +222,7 @@ def plot_calibration(y_true, prob_values, alphas, betas, title, out_name):
         brier_certain = brier_score_loss(y_certain, p_certain)
 
         plt.plot(mean_pred_certain, frac_pos_certain,
-                 marker="s", label=f"alpha={a}, beta={b} (Brier={brier_certain:.3f})")
+                 marker="s", label=f"beta={a}, alpha={b} (Brier={brier_certain:.3f})")
 
     plt.xlabel("Mean predicted probability")
     plt.ylabel("Fraction of positives")
@@ -245,7 +237,7 @@ def plot_calibration(y_true, prob_values, alphas, betas, title, out_name):
 # ==============================
 
 
-def plot_confusion_matrices(y_true, y_pred_binary_model, probs, alphas, betas, title, out_name):
+def plot_confusion_matrices(y_true, y_pred_binary_model, probs, betas, alphas, title, out_name):
     fig, axes = plt.subplots(2, 2, figsize=(10, 4))
     ConfusionMatrixDisplay(
         confusion_matrix(y_true, y_pred_binary_model, labels=[0, 1]),
@@ -254,7 +246,7 @@ def plot_confusion_matrices(y_true, y_pred_binary_model, probs, alphas, betas, t
     n_all = len(y_true)
     axes[0][0].set_title(f"{title} - Binary (n={n_all})")
 
-    for i, (a, b) in enumerate(zip(alphas, betas), 1):
+    for i, (a, b) in enumerate(zip(betas, alphas), 1):
         decisions = np.where(probs >= a, 1, np.where(probs <= b, 0, -1))
         accepted_indices = decisions != -1
         y_true_certain = y_true[accepted_indices]
@@ -265,7 +257,7 @@ def plot_confusion_matrices(y_true, y_pred_binary_model, probs, alphas, betas, t
             display_labels=[0, 1]
         ).plot(ax=axes[i // 2][i % 2], colorbar=False, cmap="Blues", values_format="d")
         n_certain = len(y_true_certain)
-        axes[i // 2][i % 2].set_title(f"{title} - Alpha={a}, Beta={b} - (n={n_certain})")
+        axes[i // 2][i % 2].set_title(f"{title} - beta={a}, alpha={b} - (n={n_certain})")
 
     plt.tight_layout()
     plt.savefig(out_name, dpi=150)
@@ -289,10 +281,10 @@ def plot_histogram(prob_rf, prob_mlp, title, out_name):
 # ==============================
 # Coverage Accuracy functions
 # ==============================
-def coverage_accuracy_curve(y_true, prob_values, alphas, betas):
+def coverage_accuracy_curve(y_true, prob_values, betas, alphas):
     coverages = []
     accuracies = []
-    for a, b in zip(alphas, betas):
+    for a, b in zip(betas, alphas):
         decisions_tmp = np.where(prob_values >= a, 1, np.where(prob_values <= b, 0, -1))
         mask = decisions_tmp != -1
         coverage = np.mean(mask)
@@ -305,9 +297,9 @@ def coverage_accuracy_curve(y_true, prob_values, alphas, betas):
     return np.array(coverages), np.array(accuracies)
 
 
-def plot_coverage_accuracy(y_test, probs_rf, probs_mlp, alphas, betas, out_name):
-    cov_rf, acc_rf = coverage_accuracy_curve(y_test, probs_rf, alphas, betas)
-    cov_mlp, acc_mlp = coverage_accuracy_curve(y_test, probs_mlp, alphas, betas)
+def plot_coverage_accuracy(y_test, probs_rf, probs_mlp, betas, alphas, out_name):
+    cov_rf, acc_rf = coverage_accuracy_curve(y_test, probs_rf, betas, alphas)
+    cov_mlp, acc_mlp = coverage_accuracy_curve(y_test, probs_mlp, betas, alphas)
 
     plt.figure(figsize=(6, 5))
     plt.plot(cov_rf, acc_rf, marker="o", label="RF")
@@ -323,7 +315,7 @@ def plot_coverage_accuracy(y_test, probs_rf, probs_mlp, alphas, betas, out_name)
 # ==============================
 # Precision-Recall functions
 # ==============================
-def pr_positive_with_alpha(y_true, prob_values, model_name, alpha_points, out_dir):
+def pr_positive_with_beta(y_true, prob_values, model_name, beta_points, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     prec, rec, _ = precision_recall_curve(y_true, prob_values)
     ap = average_precision_score(y_true, prob_values)
@@ -331,14 +323,14 @@ def pr_positive_with_alpha(y_true, prob_values, model_name, alpha_points, out_di
     plt.figure(figsize=(6, 5))
     plt.plot(rec, prec, label=f"{model_name} PR (AP={ap:.3f})")
 
-    for a in alpha_points:
-        y_pred_alpha = (prob_values >= a).astype(int)
-        tp = np.sum((y_true == 1) & (y_pred_alpha == 1))
-        fp = np.sum((y_true == 0) & (y_pred_alpha == 1))
-        fn = np.sum((y_true == 1) & (y_pred_alpha == 0))
-        prec_alpha = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        rec_alpha = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        plt.scatter([rec_alpha], [prec_alpha], label=f"alpha={a:.2f}", marker="o")
+    for a in beta_points:
+        y_pred_beta = (prob_values >= a).astype(int)
+        tp = np.sum((y_true == 1) & (y_pred_beta == 1))
+        fp = np.sum((y_true == 0) & (y_pred_beta == 1))
+        fn = np.sum((y_true == 1) & (y_pred_beta == 0))
+        prec_beta = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec_beta = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        plt.scatter([rec_beta], [prec_beta], label=f"beta={a:.2f}", marker="o")
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
@@ -350,7 +342,7 @@ def pr_positive_with_alpha(y_true, prob_values, model_name, alpha_points, out_di
     plt.close()
 
 
-def pr_negative_with_beta(y_true, prob_values, model_name, beta_points, out_dir):
+def pr_negative_with_alpha(y_true, prob_values, model_name, alpha_points, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     y_neg = 1 - y_true
     p_neg = 1 - prob_values
@@ -360,7 +352,7 @@ def pr_negative_with_beta(y_true, prob_values, model_name, beta_points, out_dir)
     plt.figure(figsize=(6, 5))
     plt.plot(rec, prec, label=f"{model_name} PR Neg (AP={ap:.3f})")
 
-    for b in beta_points:
+    for b in alpha_points:
         thr_neg = 1.0 - b
         y_pred_thr = (p_neg >= thr_neg).astype(int)
         tp = np.sum((y_neg == 1) & (y_pred_thr == 1))
@@ -368,13 +360,13 @@ def pr_negative_with_beta(y_true, prob_values, model_name, beta_points, out_dir)
         fn = np.sum((y_neg == 1) & (y_pred_thr == 0))
         prec_b = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         rec_b = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        plt.scatter([rec_b], [prec_b], label=f"beta={b:.2f}", marker="x")
+        plt.scatter([rec_b], [prec_b], label=f"alpha={b:.2f}", marker="x")
 
     plt.xlabel("Recall (neg)")
     plt.ylabel("Precision (neg)")
     plt.title(f"Precision-Recall with OPs (Negative class) - {model_name}")
     plt.legend()
     plt.tight_layout()
-    out_path = os.path.join(out_dir, f"{model_name.lower()}_pr_negative_beta.png")
+    out_path = os.path.join(out_dir, f"{model_name.lower()}_pr_negative_alpha.png")
     plt.savefig(out_path, dpi=150)
     plt.close()

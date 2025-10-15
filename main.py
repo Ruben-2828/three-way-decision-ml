@@ -9,7 +9,7 @@ import matplotlib
 
 from utils.functions import (
     prepare_dataset, plot_negative_roc, plot_positive_roc, plot_calibration, plot_confusion_matrices, plot_histogram,
-    plot_coverage_accuracy, pr_positive_with_alpha, pr_negative_with_beta, init_classification_metrics_csv,
+    plot_coverage_accuracy, pr_positive_with_beta, pr_negative_with_alpha, init_classification_metrics_csv,
     save_classification_metrics
 )
 
@@ -28,8 +28,8 @@ for dataset in datasets:
         X, y, test_size=0.3, random_state=42, stratify=y
     )
 
-    alpha_points = [0.70, 0.80, 0.90]
-    beta_points = [0.30, 0.20, 0.10]
+    beta_points = [0.70, 0.80, 0.90]
+    alpha_points = [0.30, 0.20, 0.10]
 
     dataset_suffix = dataset_name.lower().replace(" ", "_")
     RUN_DIR = os.path.join("outputs", f"{dataset_suffix}")
@@ -53,14 +53,14 @@ for dataset in datasets:
 
     accuracy_binary = accuracy_score(y_test, y_pred_binary)
     class_report_binary = classification_report(y_test, y_pred_binary, output_dict=True)
-    save_classification_metrics(class_report_binary, "RF_binary", accuracy_binary, None, None, 0,
-                                dataset_name, csv_report_path)
+    save_classification_metrics(class_report_binary, "RF_binary", accuracy_binary, None, None, 0, dataset_name,
+                                csv_report_path)
 
     # 3WD prediction
     probs = clf.predict_proba(X_test)[:, 1]
 
-    for (alpha, beta) in zip(alpha_points, beta_points):
-        decisions = np.where(probs >= alpha, 1, np.where(probs <= beta, 0, -1))
+    for (beta, alpha) in zip(beta_points, alpha_points):
+        decisions = np.where(probs >= beta, 1, np.where(probs <= alpha, 0, -1))
 
         accepted_indices = decisions != -1
         y_true_certain = y_test[accepted_indices]
@@ -102,14 +102,14 @@ for dataset in datasets:
 
     accuracy_binary_nn = accuracy_score(y_test, y_pred_binary_nn)
     class_report_binary_nn = classification_report(y_test, y_pred_binary_nn, output_dict=True)
-    save_classification_metrics(class_report_binary_nn, "MLP_binary", accuracy_binary_nn, None, None,
-                                0, dataset_name, csv_report_path)
+    save_classification_metrics(class_report_binary_nn, "MLP_binary", accuracy_binary_nn, None, None, 0, dataset_name,
+                                csv_report_path)
 
     # 3WD prediction
     probs_nn = mlp.predict_proba(X_test_nn)[:, 1]
 
-    for (alpha, beta) in zip(alpha_points, beta_points):
-        decisions_nn = np.where(probs_nn >= alpha, 1, np.where(probs_nn <= beta, 0, -1))
+    for (beta, alpha) in zip(beta_points, alpha_points):
+        decisions_nn = np.where(probs_nn >= beta, 1, np.where(probs_nn <= alpha, 0, -1))
 
         accepted_indices_nn = decisions_nn != -1
         y_true_certain_nn = y_test[accepted_indices_nn]
@@ -127,11 +127,11 @@ for dataset in datasets:
     # 1) Coverage-Accuracy sweep (RF e MLP)
     # ==============================================
 
-    # symmetric sweep: beta = 1 - alpha
-    alphas_cov_acc = np.linspace(0.55, 0.95, 21)
-    betas_cov_acc = 1.0 - alphas_cov_acc
+    # symmetric sweep: alpha = 1 - beta
+    betas_cov_acc = np.linspace(0.55, 0.95, 21)
+    alphas_cov_acc = 1.0 - betas_cov_acc
 
-    plot_coverage_accuracy(y_test, probs, probs_nn, alphas_cov_acc, betas_cov_acc,
+    plot_coverage_accuracy(y_test, probs, probs_nn, betas_cov_acc, alphas_cov_acc,
                            os.path.join(RUN_DIR, "coverage_accuracy_rf_mlp.png"))
 
     # ==============================================
@@ -140,23 +140,23 @@ for dataset in datasets:
 
     os.makedirs(os.path.join(RUN_DIR, "roc_3wd"), exist_ok=True)
     plot_positive_roc(y_test, probs, "RF", os.path.join(RUN_DIR, "roc_3wd", "rf_roc_positive.png"),
-                      alpha_points=alpha_points)
+                      beta_points=beta_points)
     plot_positive_roc(y_test, probs_nn, "MLP", os.path.join(RUN_DIR, "roc_3wd", "mlp_roc_positive.png"),
-                      alpha_points=alpha_points)
+                      beta_points=beta_points)
     plot_negative_roc(y_test, probs, "RF", os.path.join(RUN_DIR, "roc_3wd", "rf_roc_negative.png"),
-                      beta_points=beta_points)
+                      alpha_points=alpha_points)
     plot_negative_roc(y_test, probs_nn, "MLP", os.path.join(RUN_DIR, "roc_3wd", "mlp_roc_negative.png"),
-                      beta_points=beta_points)
+                      alpha_points=alpha_points)
 
     # ==========================================================
     # 3) Calibration diagrams + Brier
     # ==========================================================
 
     mask_rf_certain = decisions != -1
-    plot_calibration(y_test, probs, alpha_points, beta_points, "RF", os.path.join(RUN_DIR, "rf_calibration.png"))
+    plot_calibration(y_test, probs, beta_points, alpha_points, "RF", os.path.join(RUN_DIR, "rf_calibration.png"))
 
     mask_mlp_certain = decisions_nn != -1
-    plot_calibration(y_test, probs_nn, alpha_points, beta_points, "MLP", os.path.join(RUN_DIR, "mlp_calibration.png"))
+    plot_calibration(y_test, probs_nn, beta_points, alpha_points, "MLP", os.path.join(RUN_DIR, "mlp_calibration.png"))
 
     # ==================================================
     # 4) Probability histograms
@@ -168,41 +168,41 @@ for dataset in datasets:
     # 5) Confusion matrices
     # ==========================================================
 
-    plot_confusion_matrices(y_test, y_pred_binary, probs, alpha_points, beta_points, "RF",
+    plot_confusion_matrices(y_test, y_pred_binary, probs, beta_points, alpha_points, "RF",
                             os.path.join(RUN_DIR, "rf_confusion_matrices.png"))
 
-    plot_confusion_matrices(y_test, y_pred_binary_nn, probs_nn, alpha_points, beta_points, "MLP",
+    plot_confusion_matrices(y_test, y_pred_binary_nn, probs_nn, beta_points, alpha_points, "MLP",
                             os.path.join(RUN_DIR, "mlp_confusion_matrices.png"))
 
     # ==========================================================
     # 6) Precision-Recall curves
     # ==========================================================
-    pr_positive_with_alpha(
-        y_test.values if hasattr(y_test, 'values') else y_test,
-        probs,
-        "RF",
-        alpha_points,
-        os.path.join(RUN_DIR, "pr_3wd"),
-    )
-    pr_positive_with_alpha(
-        y_test.values if hasattr(y_test, 'values') else y_test,
-        probs_nn,
-        "MLP",
-        alpha_points,
-        os.path.join(RUN_DIR, "pr_3wd"),
-    )
-    pr_negative_with_beta(
+    pr_positive_with_beta(
         y_test.values if hasattr(y_test, 'values') else y_test,
         probs,
         "RF",
         beta_points,
         os.path.join(RUN_DIR, "pr_3wd"),
     )
-    pr_negative_with_beta(
+    pr_positive_with_beta(
         y_test.values if hasattr(y_test, 'values') else y_test,
         probs_nn,
         "MLP",
         beta_points,
+        os.path.join(RUN_DIR, "pr_3wd"),
+    )
+    pr_negative_with_alpha(
+        y_test.values if hasattr(y_test, 'values') else y_test,
+        probs,
+        "RF",
+        alpha_points,
+        os.path.join(RUN_DIR, "pr_3wd"),
+    )
+    pr_negative_with_alpha(
+        y_test.values if hasattr(y_test, 'values') else y_test,
+        probs_nn,
+        "MLP",
+        alpha_points,
         os.path.join(RUN_DIR, "pr_3wd"),
     )
 
